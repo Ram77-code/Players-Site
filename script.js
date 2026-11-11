@@ -3,10 +3,12 @@ const nav = document.querySelector('.nav');
 menuButton.addEventListener('click', () => {
   const isOpen = nav.classList.toggle('open');
   menuButton.setAttribute('aria-expanded', String(isOpen));
+  menuButton.setAttribute('aria-label', isOpen ? 'Close navigation' : 'Open navigation');
 });
 nav.querySelectorAll('a').forEach(link => link.addEventListener('click', () => {
   nav.classList.remove('open');
   menuButton.setAttribute('aria-expanded', 'false');
+  menuButton.setAttribute('aria-label', 'Open navigation');
 }));
 document.getElementById('year').textContent = new Date().getFullYear();
 
@@ -18,6 +20,7 @@ const submitButton = contactForm.querySelector('button[type="submit"]');
 const submitLabel = submitButton.querySelector('.submit-label');
 let turnstileWidgetId;
 let turnstileToken = '';
+let submissionId = crypto.randomUUID();
 
 function setFormStatus(message, state = '') {
   formNote.textContent = message;
@@ -67,6 +70,7 @@ contactForm.addEventListener('submit', async event => {
 
   const formData = new FormData(contactForm);
   const payload = Object.fromEntries(['name', 'email', 'service', 'message'].map(name => [name, formData.get(name)]));
+  payload.submissionId = submissionId;
   if (turnstileToken) payload.turnstileToken = turnstileToken;
 
   try {
@@ -80,6 +84,7 @@ contactForm.addEventListener('submit', async event => {
     if (!response.ok) throw new Error(result.error?.message || 'We could not send your enquiry. Please try again.');
 
     contactForm.reset();
+    submissionId = crypto.randomUUID();
     setFormStatus(result.message || 'Thanks. Your enquiry has been received.', 'success');
   } catch (error) {
     const message = error.name === 'TimeoutError'

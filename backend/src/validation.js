@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 export const enquirySchema = z.object({
+  submissionId: z.string().uuid(),
   name: z.string().trim().min(2).max(100),
   email: z.string().trim().email().max(254),
   service: z.enum([

@@ -1,7 +1,6 @@
 import cors from 'cors';
 import express from 'express';
 import helmet from 'helmet';
-import { sendEnquiryNotification } from './services/notifications.js';
 import { enquirySchema } from './validation.js';
 
 function errorResponse(response, status, code, message, fields) {
@@ -11,7 +10,7 @@ function errorResponse(response, status, code, message, fields) {
   });
 }
 
-export function createApp({ config, supabase, resend, rateLimit, verifyCaptcha, logger = console }) {
+export function createApp({ config, supabase, rateLimit, verifyCaptcha, logger = console }) {
   const app = express();
   app.set('trust proxy', config.TRUST_PROXY);
   app.disable('x-powered-by');
@@ -39,7 +38,7 @@ export function createApp({ config, supabase, resend, rateLimit, verifyCaptcha, 
       return errorResponse(response, 400, 'invalid_input', 'Check the enquiry details and try again.', fields);
     }
 
-    const { turnstileToken, ...enquiry } = parsed.data;
+    const { submissionId, turnstileToken, ...enquiry } = parsed.data;
     if (config.turnstileEnabled) {
       if (!turnstileToken) {
         return errorResponse(response, 400, 'captcha_required', 'Complete the spam protection check and try again.');
@@ -55,45 +54,30 @@ export function createApp({ config, supabase, resend, rateLimit, verifyCaptcha, 
       }
     }
 
-    let record;
     try {
       const result = await supabase.from('enquiries').insert({
         ...enquiry,
-        notification_status: config.resendEnabled ? 'processing' : 'disabled',
-        notification_attempts: config.resendEnabled ? 1 : 0,
-        notification_attempted_at: config.resendEnabled ? new Date().toISOString() : null
+        submission_id: submissionId,
+        notification_status: 'disabled',
+        notification_attempts: 0,
+        notification_attempted_at: null
       }).select('id').single();
       if (result.error) throw result.error;
-      record = result.data;
     } catch (error) {
+      if (error.code === '23505') {
+        return response.status(200).json({
+          success: true,
+          duplicate: true,
+          message: 'This enquiry was already received.'
+        });
+      }
       logger.error({ event: 'enquiry_storage_failed', error: error.message });
       return errorResponse(response, 503, 'storage_unavailable', 'We could not receive your enquiry right now. Please try again shortly.');
     }
 
-    let notificationSent = false;
-    if (config.resendEnabled) {
-      try {
-        await sendEnquiryNotification(resend, config, enquiry, record.id);
-        notificationSent = true;
-      } catch (error) {
-        logger.error({ event: 'enquiry_notification_failed', enquiryId: record.id, error: error.message });
-      }
-
-      try {
-        const update = supabase.from('enquiries').update({
-          notification_status: notificationSent ? 'sent' : 'failed',
-          notification_sent_at: notificationSent ? new Date().toISOString() : null
-        }).eq('id', record.id);
-        const result = await update;
-        if (result.error) throw result.error;
-      } catch (error) {
-        logger.error({ event: 'enquiry_status_update_failed', enquiryId: record.id, error: error.message });
-      }
-    }
-
     return response.status(201).json({
       success: true,
-      message: 'Thanks. Your enquiry has been received and the PLAYERS team will be in touch.'
+      message: 'Thanks. Your enquiry has been received.'
     });
   });
 

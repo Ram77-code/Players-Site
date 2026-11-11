@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { enquirySchema } from '../src/validation.js';
 
 const validEnquiry = {
+  submissionId: '01234567-89ab-4cde-8fab-0123456789ab',
   name: 'Jordan Lee',
   email: 'jordan@example.com',
   service: 'AI-Powered Applications',

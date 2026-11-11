@@ -2,7 +2,7 @@ import 'dotenv/config';
 import { z } from 'zod';
 
 const envSchema = z.object({
-  NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  NODE_ENV: z.enum(['development', 'test', 'production']).default('production'),
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   TRUST_PROXY: z.coerce.number().int().min(0).default(0),
   CORS_ORIGINS: z.string().default('http://localhost:5500'),
@@ -11,9 +11,6 @@ const envSchema = z.object({
   SUPABASE_SECRET_KEY: z.string().default(''),
   SUPABASE_PUBLISHABLE_KEY: z.string().default(''),
   SUPABASE_SERVICE_ROLE_KEY: z.string().default(''),
-  RESEND_API_KEY: z.string().default(''),
-  EMAIL_FROM: z.string().default(''),
-  EMAIL_TO: z.union([z.literal(''), z.string().email()]).default(''),
   TURNSTILE_SECRET_KEY: z.string().default(''),
   TURNSTILE_SITE_KEY: z.string().default(''),
   TURNSTILE_ALLOWED_HOSTNAMES: z.string().default(''),
@@ -37,6 +34,15 @@ const envSchema = z.object({
     context.addIssue({ code: 'custom', path: ['FRONTEND_ORIGIN'], message: 'The production frontend origin must use HTTPS.' });
   }
 
+  if (config.NODE_ENV === 'production' && !config.TURNSTILE_SECRET_KEY) {
+    context.addIssue({ code: 'custom', path: ['TURNSTILE_SECRET_KEY'], message: 'Turnstile is required in production.' });
+  }
+
+  const allowedTurnstileHostnames = config.TURNSTILE_ALLOWED_HOSTNAMES.split(',').map(host => host.trim()).filter(Boolean);
+  if (config.NODE_ENV === 'production' && !allowedTurnstileHostnames.length) {
+    context.addIssue({ code: 'custom', path: ['TURNSTILE_ALLOWED_HOSTNAMES'], message: 'Configure at least one production Turnstile hostname.' });
+  }
+
   if (!config.SUPABASE_SECRET_KEY && !config.SUPABASE_SERVICE_ROLE_KEY) {
     context.addIssue({
       code: 'custom',
@@ -46,7 +52,6 @@ const envSchema = z.object({
   }
 
   const providerGroups = [
-    ['RESEND_API_KEY', 'EMAIL_FROM', 'EMAIL_TO'],
     ['TURNSTILE_SECRET_KEY', 'TURNSTILE_SITE_KEY'],
     ['UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN']
   ];
@@ -91,7 +96,6 @@ export function loadConfig(environment = process.env) {
     supabaseServerKey: parsed.data.SUPABASE_SECRET_KEY || parsed.data.SUPABASE_SERVICE_ROLE_KEY,
     corsOrigins: [...new Set([frontendOrigin, ...corsOrigins])],
     turnstileAllowedHostnames: parsed.data.TURNSTILE_ALLOWED_HOSTNAMES.split(',').map(host => host.trim().toLowerCase()).filter(Boolean),
-    resendEnabled: Boolean(parsed.data.RESEND_API_KEY),
     turnstileEnabled: Boolean(parsed.data.TURNSTILE_SECRET_KEY),
     upstashEnabled: Boolean(parsed.data.UPSTASH_REDIS_REST_URL)
   };

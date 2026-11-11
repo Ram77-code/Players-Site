@@ -2,6 +2,7 @@ create extension if not exists pgcrypto;
 
 create table if not exists public.enquiries (
   id uuid primary key default gen_random_uuid(),
+  submission_id uuid not null,
   name text not null check (char_length(name) between 2 and 100),
   email text not null check (char_length(email) <= 254),
   service text not null check (service in (
@@ -21,6 +22,11 @@ create table if not exists public.enquiries (
   notification_sent_at timestamptz,
   created_at timestamptz not null default now()
 );
+
+alter table public.enquiries add column if not exists submission_id uuid;
+update public.enquiries set submission_id = gen_random_uuid() where submission_id is null;
+alter table public.enquiries alter column submission_id set not null;
+create unique index if not exists enquiries_submission_id_idx on public.enquiries (submission_id);
 
 alter table public.enquiries
   add column if not exists notification_attempts smallint not null default 0

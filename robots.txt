@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://players-site.players-technology77.workers.dev/sitemap.xml

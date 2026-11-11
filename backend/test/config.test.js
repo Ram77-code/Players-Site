@@ -11,17 +11,19 @@ const baseEnvironment = {
 test('allows optional providers to be omitted in development', () => {
   const config = loadConfig(baseEnvironment);
   assert.equal(config.turnstileEnabled, false);
-  assert.equal(config.resendEnabled, false);
   assert.equal(config.upstashEnabled, false);
 });
 
 test('rejects partially configured optional providers', () => {
   assert.throws(() => loadConfig({ ...baseEnvironment, TURNSTILE_SITE_KEY: 'public-key' }), /TURNSTILE_SECRET_KEY/);
-  assert.throws(() => loadConfig({ ...baseEnvironment, RESEND_API_KEY: 'test-key' }), /EMAIL_FROM/);
 });
 
 test('requires Upstash for production shared rate limiting', () => {
   assert.throws(() => loadConfig({ ...baseEnvironment, NODE_ENV: 'production' }), /UPSTASH_REDIS_REST_URL/);
+});
+
+test('defaults to production safeguards when NODE_ENV is unset', () => {
+  assert.throws(() => loadConfig({ ...baseEnvironment, NODE_ENV: undefined }), /UPSTASH_REDIS_REST_URL/);
 });
 
 test('allows the configured frontend origin and excludes loopback origins in production', () => {
@@ -30,6 +32,9 @@ test('allows the configured frontend origin and excludes loopback origins in pro
     NODE_ENV: 'production',
     UPSTASH_REDIS_REST_URL: 'https://redis.example.com',
     UPSTASH_REDIS_REST_TOKEN: 'test-token',
+    TURNSTILE_SECRET_KEY: 'test-secret',
+    TURNSTILE_SITE_KEY: 'public-site-key',
+    TURNSTILE_ALLOWED_HOSTNAMES: 'players.example',
     CORS_ORIGINS: 'http://localhost:5500,https://preview.players.example',
     FRONTEND_ORIGIN: 'https://players.example'
   });
@@ -63,4 +68,15 @@ test('requires a server-side Supabase key', () => {
     SUPABASE_SERVICE_ROLE_KEY: '',
     SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_test'
   }), /SUPABASE_SECRET_KEY/);
+});
+
+test('requires Turnstile and a hostname allowlist in production', () => {
+  const production = {
+    ...baseEnvironment,
+    NODE_ENV: 'production',
+    UPSTASH_REDIS_REST_URL: 'https://redis.example.com',
+    UPSTASH_REDIS_REST_TOKEN: 'test-token'
+  };
+  assert.throws(() => loadConfig(production), /TURNSTILE_SECRET_KEY/);
+  assert.throws(() => loadConfig({ ...production, TURNSTILE_SECRET_KEY: 'secret', TURNSTILE_SITE_KEY: 'site' }), /TURNSTILE_ALLOWED_HOSTNAMES/);
 });
