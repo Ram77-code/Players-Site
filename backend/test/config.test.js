@@ -24,6 +24,22 @@ test('requires Upstash for production shared rate limiting', () => {
   assert.throws(() => loadConfig({ ...baseEnvironment, NODE_ENV: 'production' }), /UPSTASH_REDIS_REST_URL/);
 });
 
+test('allows the configured frontend origin and excludes loopback origins in production', () => {
+  const config = loadConfig({
+    ...baseEnvironment,
+    NODE_ENV: 'production',
+    UPSTASH_REDIS_REST_URL: 'https://redis.example.com',
+    UPSTASH_REDIS_REST_TOKEN: 'test-token',
+    CORS_ORIGINS: 'http://localhost:5500,https://preview.players.example',
+    FRONTEND_ORIGIN: 'https://players.example'
+  });
+  assert.deepEqual(config.corsOrigins, ['https://players.example', 'https://preview.players.example']);
+});
+
+test('rejects wildcard CORS configuration', () => {
+  assert.throws(() => loadConfig({ ...baseEnvironment, CORS_ORIGINS: '*' }), /CORS_ORIGINS/);
+});
+
 test('uses the modern Supabase secret key and ignores the publishable key for server auth', () => {
   const config = loadConfig({
     ...baseEnvironment,

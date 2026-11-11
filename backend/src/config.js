@@ -6,6 +6,7 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   TRUST_PROXY: z.coerce.number().int().min(0).default(0),
   CORS_ORIGINS: z.string().default('http://localhost:5500'),
+  FRONTEND_ORIGIN: z.string().url().default('https://players-site.players-technology77.workers.dev'),
   SUPABASE_URL: z.string().url(),
   SUPABASE_SECRET_KEY: z.string().default(''),
   SUPABASE_PUBLISHABLE_KEY: z.string().default(''),
@@ -19,6 +20,23 @@ const envSchema = z.object({
   UPSTASH_REDIS_REST_URL: z.union([z.literal(''), z.string().url()]).default(''),
   UPSTASH_REDIS_REST_TOKEN: z.string().default('')
 }).superRefine((config, context) => {
+  const corsOrigins = config.CORS_ORIGINS.split(',').map(origin => origin.trim()).filter(Boolean);
+  for (const origin of corsOrigins) {
+    try {
+      const parsedOrigin = new URL(origin);
+      if (origin === '*' || parsedOrigin.origin !== origin || !['http:', 'https:'].includes(parsedOrigin.protocol)) {
+        throw new Error('Invalid origin');
+      }
+    } catch {
+      context.addIssue({ code: 'custom', path: ['CORS_ORIGINS'], message: 'Use a comma-separated list of exact HTTP(S) origins.' });
+      break;
+    }
+  }
+
+  if (config.NODE_ENV === 'production' && new URL(config.FRONTEND_ORIGIN).protocol !== 'https:') {
+    context.addIssue({ code: 'custom', path: ['FRONTEND_ORIGIN'], message: 'The production frontend origin must use HTTPS.' });
+  }
+
   if (!config.SUPABASE_SECRET_KEY && !config.SUPABASE_SERVICE_ROLE_KEY) {
     context.addIssue({
       code: 'custom',
@@ -60,10 +78,18 @@ export function loadConfig(environment = process.env) {
     throw new Error(`Invalid environment configuration: ${missing}`);
   }
 
+  const frontendOrigin = new URL(parsed.data.FRONTEND_ORIGIN).origin;
+  const configuredOrigins = parsed.data.CORS_ORIGINS.split(',').map(origin => origin.trim()).filter(Boolean);
+  const corsOrigins = configuredOrigins.filter(origin => {
+    if (parsed.data.NODE_ENV !== 'production') return true;
+    const hostname = new URL(origin).hostname.toLowerCase();
+    return !['localhost', '127.0.0.1', '::1'].includes(hostname);
+  });
+
   return {
     ...parsed.data,
     supabaseServerKey: parsed.data.SUPABASE_SECRET_KEY || parsed.data.SUPABASE_SERVICE_ROLE_KEY,
-    corsOrigins: parsed.data.CORS_ORIGINS.split(',').map(origin => origin.trim()).filter(Boolean),
+    corsOrigins: [...new Set([frontendOrigin, ...corsOrigins])],
     turnstileAllowedHostnames: parsed.data.TURNSTILE_ALLOWED_HOSTNAMES.split(',').map(host => host.trim().toLowerCase()).filter(Boolean),
     resendEnabled: Boolean(parsed.data.RESEND_API_KEY),
     turnstileEnabled: Boolean(parsed.data.TURNSTILE_SECRET_KEY),
